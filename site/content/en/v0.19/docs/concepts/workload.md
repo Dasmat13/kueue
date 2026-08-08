@@ -175,7 +175,7 @@ spec:
   maximumExecutionTimeSeconds: n
 ```
 
-If the workload spends more then `n` seconds in `Admitted` state, including the time spent as `Admitted` in previous "Admit/Evict" cycles, it gets automatically deactivated.
+If the workload spends more than `n` seconds in `Admitted` state, including the time spent as `Admitted` in previous "Admit/Evict" cycles, it gets automatically deactivated.
 Once deactivated, the accumulated time spent as active in previous "Admit/Evict" cycles is set to 0.
 
 If `maximumExecutionTimeSeconds` is not specified, the workload has no execution time limit.

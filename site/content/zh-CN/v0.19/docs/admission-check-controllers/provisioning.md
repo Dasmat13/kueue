@@ -129,8 +129,7 @@ podSetUpdates:
 
 ProvisioningRequestConfig 中的此代码片段指示 Kueue 在配置后更新作业的 PodTemplate，
 以针对具有标签 `autoscaling.cloud-provider.com/provisioning-request` 的新配置节点，
-该标签的值来自 [ProvisiongClassDetails](https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/apis/provisioningrequest/autoscaling.x-k8s.io/v1/types.go#L169)
-映射中的 "RequestKey" 键。
+该标签的值来自 [ProvisioningClassDetails](https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/apis/provisioningrequest/autoscaling.x-k8s.io/v1/types.go#L169) 中的 `RequestKey` 键。
 
 请注意，这假设配置类（可能是云提供商特定的）支持在新配置的节点上设置唯一的节点标签。
 
