@@ -200,3 +200,24 @@ func prependPagedListReactor(clientset *fake.Clientset, resource string, pages [
 		return true, obj, nil
 	})
 }
+
+func TestListSubcommandsNoArgs(t *testing.T) {
+	streams, _, _, _ := genericiooptions.NewTestIOStreams()
+	fakeClock := testingclock.NewFakeClock(time.Now())
+	tcg := cmdtesting.NewTestClientGetter()
+
+	cmd := NewListCmd(tcg, streams, fakeClock)
+	for _, subCmd := range cmd.Commands() {
+		t.Run(subCmd.Name(), func(t *testing.T) {
+			if subCmd.Args == nil {
+				t.Fatalf("subcommand %q should have Args set", subCmd.Name())
+			}
+			if err := subCmd.Args(subCmd, []string{"unexpected-arg"}); err == nil {
+				t.Errorf("Expected error for subcommand %q when unexpected positional arguments are provided", subCmd.Name())
+			}
+			if err := subCmd.Args(subCmd, []string{}); err != nil {
+				t.Errorf("Unexpected error for subcommand %q with no arguments: %v", subCmd.Name(), err)
+			}
+		})
+	}
+}
