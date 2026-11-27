@@ -32,6 +32,7 @@ import (
 
 	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta2"
 	"sigs.k8s.io/kueue/client-go/clientset/versioned/fake"
+	"sigs.k8s.io/kueue/cmd/kueuectl/app/flags"
 	cmdtesting "sigs.k8s.io/kueue/cmd/kueuectl/app/testing"
 	utiltestingapi "sigs.k8s.io/kueue/pkg/util/testing/v1beta2"
 )
@@ -726,6 +727,174 @@ func TestCreateClusterQueueFlagCompletions(t *testing.T) {
 			}
 			if diff := cmp.Diff(tc.wantDirective, directive); diff != "" {
 				t.Errorf("Unexpected directive for %s (-want/+got):\n%s", tc.flagName, diff)
+			}
+		})
+	}
+}
+
+func TestValidateClusterQueue(t *testing.T) {
+	testCases := map[string]struct {
+		options *ClusterQueueOptions
+		wantErr string
+	}{
+		"valid options with default values": {
+			options: &ClusterQueueOptions{
+				Name:                         "cq1",
+				QueueingStrategy:             kueue.BestEffortFIFO,
+				ReclaimWithinCohort:          kueue.PreemptionPolicyNever,
+				PreemptionWithinClusterQueue: kueue.PreemptionPolicyNever,
+			},
+		},
+		"valid options with non-default values": {
+			options: &ClusterQueueOptions{
+				Name:                         "cq1",
+				QueueingStrategy:             kueue.StrictFIFO,
+				ReclaimWithinCohort:          kueue.PreemptionPolicyAny,
+				PreemptionWithinClusterQueue: kueue.PreemptionPolicyLowerOrNewerEqualPriority,
+			},
+		},
+		"valid options with LowerPriority": {
+			options: &ClusterQueueOptions{
+				Name:                         "cq1",
+				QueueingStrategy:             kueue.BestEffortFIFO,
+				ReclaimWithinCohort:          kueue.PreemptionPolicyLowerPriority,
+				PreemptionWithinClusterQueue: kueue.PreemptionPolicyLowerPriority,
+			},
+		},
+		"missing name": {
+			options: &ClusterQueueOptions{
+				QueueingStrategy:             kueue.BestEffortFIFO,
+				ReclaimWithinCohort:          kueue.PreemptionPolicyNever,
+				PreemptionWithinClusterQueue: kueue.PreemptionPolicyNever,
+			},
+			wantErr: "name must be specified",
+		},
+		"invalid queuing-strategy": {
+			options: &ClusterQueueOptions{
+				Name:                         "cq1",
+				QueueingStrategy:             "invalid",
+				ReclaimWithinCohort:          kueue.PreemptionPolicyNever,
+				PreemptionWithinClusterQueue: kueue.PreemptionPolicyNever,
+			},
+			wantErr: `invalid queuing-strategy value (invalid). Must be "BestEffortFIFO" or "StrictFIFO"`,
+		},
+		"empty queuing-strategy": {
+			options: &ClusterQueueOptions{
+				Name:                         "cq1",
+				QueueingStrategy:             "",
+				ReclaimWithinCohort:          kueue.PreemptionPolicyNever,
+				PreemptionWithinClusterQueue: kueue.PreemptionPolicyNever,
+			},
+			wantErr: `invalid queuing-strategy value (). Must be "BestEffortFIFO" or "StrictFIFO"`,
+		},
+		"invalid reclaim-within-cohort": {
+			options: &ClusterQueueOptions{
+				Name:                         "cq1",
+				QueueingStrategy:             kueue.BestEffortFIFO,
+				ReclaimWithinCohort:          "invalid",
+				PreemptionWithinClusterQueue: kueue.PreemptionPolicyNever,
+			},
+			wantErr: `invalid reclaim-within-cohort value (invalid). Must be "Never", "LowerPriority", or "Any"`,
+		},
+		"invalid preemption-within-cluster-queue": {
+			options: &ClusterQueueOptions{
+				Name:                         "cq1",
+				QueueingStrategy:             kueue.BestEffortFIFO,
+				ReclaimWithinCohort:          kueue.PreemptionPolicyNever,
+				PreemptionWithinClusterQueue: "invalid",
+			},
+			wantErr: `invalid preemption-within-cluster-queue value (invalid). Must be "Never", "LowerPriority", or "LowerOrNewerEqualPriority"`,
+		},
+		"preemption-within-cluster-queue cannot be Any": {
+			options: &ClusterQueueOptions{
+				Name:                         "cq1",
+				QueueingStrategy:             kueue.BestEffortFIFO,
+				ReclaimWithinCohort:          kueue.PreemptionPolicyNever,
+				PreemptionWithinClusterQueue: kueue.PreemptionPolicyAny,
+			},
+			wantErr: `invalid preemption-within-cluster-queue value (Any). Must be "Never", "LowerPriority", or "LowerOrNewerEqualPriority"`,
+		},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			gotErr := tc.options.Validate()
+			var gotErrMessage string
+			if gotErr != nil {
+				gotErrMessage = gotErr.Error()
+			}
+			if diff := cmp.Diff(tc.wantErr, gotErrMessage); diff != "" {
+				t.Errorf("Unexpected error (-want,+got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCreateClusterQueueCommand(t *testing.T) {
+	testCases := map[string]struct {
+		cqName     string
+		args       []string
+		wantOut    string
+		wantOutErr string
+		wantErr    string
+	}{
+		"should create clusterqueue with client dry-run": {
+			cqName:  "cq1",
+			args:    []string{"--dry-run=client", "--queuing-strategy=StrictFIFO", "--reclaim-within-cohort=Any", "--preemption-within-cluster-queue=LowerPriority"},
+			wantOut: "clusterqueue.kueue.x-k8s.io/cq1 created (client dry run)\n",
+		},
+		"should fail with invalid queuing-strategy": {
+			cqName:  "cq1",
+			args:    []string{"--queuing-strategy=invalid"},
+			wantErr: `invalid queuing-strategy value (invalid). Must be "BestEffortFIFO" or "StrictFIFO"`,
+		},
+		"should fail with invalid reclaim-within-cohort": {
+			cqName:  "cq1",
+			args:    []string{"--reclaim-within-cohort=invalid"},
+			wantErr: `invalid reclaim-within-cohort value (invalid). Must be "Never", "LowerPriority", or "Any"`,
+		},
+		"should fail with invalid preemption-within-cluster-queue": {
+			cqName:  "cq1",
+			args:    []string{"--preemption-within-cluster-queue=invalid"},
+			wantErr: `invalid preemption-within-cluster-queue value (invalid). Must be "Never", "LowerPriority", or "LowerOrNewerEqualPriority"`,
+		},
+		"should fail with Any for preemption-within-cluster-queue": {
+			cqName:  "cq1",
+			args:    []string{"--preemption-within-cluster-queue=Any"},
+			wantErr: `invalid preemption-within-cluster-queue value (Any). Must be "Never", "LowerPriority", or "LowerOrNewerEqualPriority"`,
+		},
+	}
+	for name, tc := range testCases {
+		t.Run(name, func(t *testing.T) {
+			streams, _, out, outErr := genericiooptions.NewTestIOStreams()
+			clientset := fake.NewSimpleClientset()
+			tcg := cmdtesting.NewTestClientGetter().WithKueueClientset(clientset)
+
+			cmd := NewClusterQueueCmd(tcg, streams)
+			flags.AddDryRunFlag(cmd)
+			cmd.SetOut(out)
+			cmd.SetErr(outErr)
+			cmd.SetArgs(append([]string{tc.cqName}, tc.args...))
+
+			gotErr := cmd.Execute()
+			var gotErrStr string
+			if gotErr != nil {
+				gotErrStr = gotErr.Error()
+			}
+
+			if diff := cmp.Diff(tc.wantErr, gotErrStr); diff != "" {
+				t.Errorf("Unexpected error (-want/+got)\n%s", diff)
+			}
+			if gotErr != nil {
+				return
+			}
+
+			gotOut := out.String()
+			if diff := cmp.Diff(tc.wantOut, gotOut); diff != "" {
+				t.Errorf("Unexpected output (-want/+got)\n%s", diff)
+			}
+			gotOutErr := outErr.String()
+			if diff := cmp.Diff(tc.wantOutErr, gotOutErr); diff != "" {
+				t.Errorf("Unexpected error output (-want/+got)\n%s", diff)
 			}
 		})
 	}

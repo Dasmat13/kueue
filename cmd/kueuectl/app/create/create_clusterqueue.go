@@ -87,6 +87,21 @@ var (
 
 	// Checks only the structure; names and quantities are validated later.
 	flavorQuotaSpecRegexp = regexp.MustCompile(`^[^\s:;=]+:([^\s:;=]+=[^\s:;=]+;)*[^\s:;=]+=[^\s:;=]+;?$`)
+
+	validQueueingStrategies = []kueue.QueueingStrategy{
+		kueue.BestEffortFIFO,
+		kueue.StrictFIFO,
+	}
+	validReclaimWithinCohortPolicies = []kueue.PreemptionPolicy{
+		kueue.PreemptionPolicyNever,
+		kueue.PreemptionPolicyLowerPriority,
+		kueue.PreemptionPolicyAny,
+	}
+	validPreemptionWithinClusterQueuePolicies = []kueue.PreemptionPolicy{
+		kueue.PreemptionPolicyNever,
+		kueue.PreemptionPolicyLowerPriority,
+		kueue.PreemptionPolicyLowerOrNewerEqualPriority,
+	}
 )
 
 type ClusterQueueOptions struct {
@@ -153,7 +168,7 @@ func NewClusterQueueCmd(clientGetter clientgetter.ClientGetter, streams generici
 			if err != nil {
 				return err
 			}
-			err = o.validate()
+			err = o.Validate()
 			if err != nil {
 				return err
 			}
@@ -263,9 +278,21 @@ func (o *ClusterQueueOptions) Complete(clientGetter clientgetter.ClientGetter, c
 }
 
 // Validate validates required fields are set to support structured generation
-func (o *ClusterQueueOptions) validate() error {
+func (o *ClusterQueueOptions) Validate() error {
 	if len(o.Name) == 0 {
 		return errors.New("name must be specified")
+	}
+
+	if !slices.Contains(validQueueingStrategies, o.QueueingStrategy) {
+		return fmt.Errorf(`invalid %s value (%v). Must be "BestEffortFIFO" or "StrictFIFO"`, queuingStrategy, o.QueueingStrategy)
+	}
+
+	if !slices.Contains(validReclaimWithinCohortPolicies, o.ReclaimWithinCohort) {
+		return fmt.Errorf(`invalid %s value (%v). Must be "Never", "LowerPriority", or "Any"`, reclaimWithinCohort, o.ReclaimWithinCohort)
+	}
+
+	if !slices.Contains(validPreemptionWithinClusterQueuePolicies, o.PreemptionWithinClusterQueue) {
+		return fmt.Errorf(`invalid %s value (%v). Must be "Never", "LowerPriority", or "LowerOrNewerEqualPriority"`, preemptionWithinClusterQueue, o.PreemptionWithinClusterQueue)
 	}
 
 	return nil
